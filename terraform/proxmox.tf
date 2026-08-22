@@ -73,8 +73,16 @@ resource "proxmox_virtual_environment_vm" "proxy" {
   node_name = var.proxmox_node
   vm_id     = var.proxy_vm_id
 
+  # false, not true: this is what was actually causing "stuck creating" —
+  # agent.enabled = true makes the provider block on the QEMU guest agent
+  # checking in (15m default timeout), and Ubuntu's cloud image doesn't
+  # ship qemu-guest-agent at all — we only install tailscale via
+  # cloud-init, never the agent. Nothing in this config reads
+  # agent-dependent attributes like ipv4_addresses (we use the tailnet
+  # hostname everywhere instead), so there's nothing to lose by not
+  # waiting for it.
   agent {
-    enabled = true
+    enabled = false
   }
 
   cpu {
