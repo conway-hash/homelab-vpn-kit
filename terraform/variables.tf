@@ -95,6 +95,30 @@ variable "proxmox_host" {
   default     = "pve"
 }
 
+variable "headscale_server_url" {
+  description = <<-EOT
+    Same reasoning as tailnet_base_domain: read out of
+    ansible/group_vars/all/vars.yml by CI, never hand-set. Needed here (not
+    just by Ansible) because the reverse proxy server VM's cloud-init joins
+    the tailnet directly at boot — see proxy_cloud_init in proxmox.tf.
+  EOT
+  type        = string
+  default     = ""
+}
+
+variable "proxy_tailscale_authkey" {
+  description = <<-EOT
+    The reverse proxy server VM's own one-shot Headscale pre-auth key
+    (PROXY_NODE_TS_AUTHKEY secret — see SETUP.md step 11/13, non-ephemeral,
+    1h expiration). Passed to cloud-init so the VM can join the tailnet at
+    boot, before anything else could reach it to do that join instead.
+    Empty is fine while enable_proxy is false.
+  EOT
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "proxmox_api_token" {
   description = "Proxmox API token, format 'user@realm!tokenid=uuid'. Scope it to just what VM creation needs — see SETUP.md. Empty is fine while enable_proxy is false."
   type        = string

@@ -8,11 +8,12 @@ zone          = "europe-west1-b"
 instance_name = "coordination-server"
 machine_type  = "e2-small"
 
-# Must match tailnet_base_domain in ansible/group_vars/all/vars.yml — that
-# file is the authoritative declaration, this is a copy only because
-# Terraform can't read it. CI passes it straight from there and never asks
-# you to retype it.
-tailnet_base_domain = "ts.yourdomain.com"
+# Must match ansible/group_vars/all/vars.yml — that file is the
+# authoritative declaration, these are copies only because Terraform can't
+# read it directly. CI passes both straight from there and never asks you
+# to retype them.
+tailnet_base_domain  = "ts.yourdomain.com"
+headscale_server_url = "https://vpn.yourdomain.com"
 
 # false until the Proxmox side is actually set up (SETUP.md steps 9-12);
 # with it false, tofu manages the GCP coordination server alone.
@@ -23,14 +24,16 @@ enable_proxy = false
 proxmox_host              = "pve"
 proxmox_node              = "pve"
 proxmox_storage_pool      = "local-lvm" # VM's actual disk — block/LVM-thin storage
-proxmox_file_storage_pool = "local"     # cloud image download target — must be 'dir'-type with 'import' content
+proxmox_file_storage_pool = "local"     # cloud image + cloud-init snippet target — must be 'dir'-type, 'import' + 'snippets' content enabled
 proxmox_network_bridge    = "vmbr0"
-proxy_vm_id            = 9000
-proxy_vm_name          = "proxy"
-proxy_cores            = 2
-proxy_memory_mb        = 1024
-proxy_disk_gb          = 8
+proxy_vm_id               = 9000
+proxy_vm_name             = "proxy"
+proxy_cores               = 2
+proxy_memory_mb           = 1024
+proxy_disk_gb             = 8
 
-# ssh_public_key, proxmox_api_token are deliberately left unset here.
-# Generate a keypair (see SETUP.md) and pass the public half explicitly:
-#   tofu apply -var="ssh_public_key=$(cat deploy_key.pub)" -var="proxmox_api_token=..."
+# ssh_public_key, proxmox_api_token, proxy_tailscale_authkey are
+# deliberately left unset here. Generate a keypair (see SETUP.md) and pass
+# the public half explicitly, along with the rest:
+#   tofu apply -var="ssh_public_key=$(cat deploy_key.pub)" \
+#     -var="proxmox_api_token=..." -var="proxy_tailscale_authkey=..."

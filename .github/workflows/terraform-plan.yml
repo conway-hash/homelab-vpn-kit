@@ -81,9 +81,11 @@ jobs:
             -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" \
             -var="enable_proxy=${{ vars.ENABLE_PROXY == 'true' }}" \
             -var="tailnet_base_domain=${{ env.TAILNET_BASE_DOMAIN }}" \
+            -var="headscale_server_url=${{ env.HEADSCALE_SERVER_URL }}" \
             -var="proxmox_host=${{ vars.PROXMOX_HOST || 'pve' }}" \
             -var="proxmox_api_token=${{ secrets.PROXMOX_API_TOKEN }}" \
             -var="proxmox_node=${{ vars.PROXMOX_NODE || 'pve' }}" \
+            -var="proxy_tailscale_authkey=${{ secrets.PROXY_NODE_TS_AUTHKEY }}" \
             -out=tfplan
 
       - name: tofu show
