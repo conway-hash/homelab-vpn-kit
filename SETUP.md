@@ -235,9 +235,16 @@ limited to VM/storage management (`PVEVMAdmin` or a custom role), not
 
 ## 11. Two Headscale pre-auth keys — these are NOT interchangeable
 
-Run on the coordination server itself (`gcloud compute ssh coordination-server --tunnel-through-iap --zone=$ZONE`, then `docker exec headscale headscale preauthkeys create ...`):
+Run on the coordination server itself (`gcloud compute ssh coordination-server --tunnel-through-iap --zone=$ZONE`, prefix docker commands with `sudo`):
 
 ```bash
+# Every preauthkey needs an owning user ID — headscale rejects the command
+# without one ("auth-key must be either tagged or owned by user"), and
+# --user takes the numeric ID, not the username string. Find yours first:
+sudo docker exec headscale headscale users list
+# The OIDC-provisioned user from your own first login is usually ID 1 —
+# confirm from the output above rather than assuming.
+
 # CI runner joins: reusable, ephemeral (cleans itself up after each run).
 # --expiration 99y instead of a short window on purpose — this key is
 # reused by every CI run indefinitely, and Headscale has no separate
@@ -246,13 +253,16 @@ Run on the coordination server itself (`gcloud compute ssh coordination-server -
 # enough to not think about again). Reusable + tailnet-only + a GitHub
 # secret never exposed to forks is the actual protection here, not the
 # expiration — see "Rotating things" below if you'd rather it stay short.
-headscale preauthkeys create --reusable --expiration 99y --ephemeral
+sudo docker exec headscale headscale preauthkeys create --user 1 --reusable --expiration 99y --ephemeral
 # → TS_AUTHKEY secret
 
 # Reverse proxy server VM's own join: one-shot, must persist, so NOT
 # ephemeral — but only needs to survive long enough for first deploy to
 # use it once, so a short expiration is correct here, unlike TS_AUTHKEY.
-headscale preauthkeys create --expiration 1h
+# Mint this one LAST, right before you actually run the Proxmox deploy —
+# an hour is easy to blow through if Cloudflare/Proxmox setup (steps 9-10)
+# isn't done yet, and there's no reuse to fall back on if it expires idle.
+sudo docker exec headscale headscale preauthkeys create --user 1 --expiration 1h
 # → PROXY_NODE_TS_AUTHKEY secret (used once, on first deploy)
 ```
 
