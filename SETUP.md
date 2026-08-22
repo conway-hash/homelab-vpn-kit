@@ -238,11 +238,20 @@ limited to VM/storage management (`PVEVMAdmin` or a custom role), not
 Run on the coordination server itself (`gcloud compute ssh coordination-server --tunnel-through-iap --zone=$ZONE`, then `docker exec headscale headscale preauthkeys create ...`):
 
 ```bash
-# CI runner joins: short-lived, reusable, ephemeral (cleans itself up)
-headscale preauthkeys create --reusable --expiration 90d --ephemeral
+# CI runner joins: reusable, ephemeral (cleans itself up after each run).
+# --expiration 99y instead of a short window on purpose — this key is
+# reused by every CI run indefinitely, and Headscale has no separate
+# "never expires" option (Prometheus-style duration parser under the
+# hood, capped around ~290y — 99y is comfortably inside that, just long
+# enough to not think about again). Reusable + tailnet-only + a GitHub
+# secret never exposed to forks is the actual protection here, not the
+# expiration — see "Rotating things" below if you'd rather it stay short.
+headscale preauthkeys create --reusable --expiration 99y --ephemeral
 # → TS_AUTHKEY secret
 
-# Reverse proxy server VM's own join: must persist, so NOT ephemeral
+# Reverse proxy server VM's own join: one-shot, must persist, so NOT
+# ephemeral — but only needs to survive long enough for first deploy to
+# use it once, so a short expiration is correct here, unlike TS_AUTHKEY.
 headscale preauthkeys create --expiration 1h
 # → PROXY_NODE_TS_AUTHKEY secret (used once, on first deploy)
 ```
@@ -307,11 +316,14 @@ a cert and come up cleanly — green means genuinely reachable, not just
 - **CLOUDFLARE_API_TOKEN**: rotate in the Cloudflare dashboard, update the
   GitHub secret, re-run `deploy.yml` — Caddy picks it up on next container
   recreate, no manual cert re-issuance needed.
-- **TS_AUTHKEY**: created with `--expiration 90d` (step 11), it actually
-  expires — every `tofu apply`/`tofu plan`/`ansible-deploy-proxy` run
-  reuses it to join the tailnet, so once it lapses those jobs start
-  failing with an auth error, not something more obviously "the key is
-  dead." Nothing rotates this for you — mint a new one the same way
-  (`headscale preauthkeys create --reusable --expiration 90d --ephemeral`)
-  before it expires, and `gh secret set TS_AUTHKEY`. No calendar reminder
-  built in yet; set one, or expect CI to tell you the hard way.
+- **TS_AUTHKEY**: created with `--expiration 99y` (step 11) specifically so
+  this isn't a recurring task — every `tofu apply`/`tofu plan`/
+  `ansible-deploy-proxy` run reuses it to join the tailnet, and Headscale
+  has no true "never expires" option, so 99y is the practical version of
+  that. If you'd rather it stay short-lived (smaller exposure window if
+  the GitHub secret ever leaked, at the cost of remembering to rotate it),
+  mint one with a shorter `--expiration` instead and rotate the same way:
+  new key, `gh secret set TS_AUTHKEY`, before the old one lapses. Nothing
+  rotates it automatically either way — see the earlier note in this repo
+  about why automating that would need a *more* dangerous permanent
+  credential than the thing it's rotating.
