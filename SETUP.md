@@ -307,3 +307,11 @@ a cert and come up cleanly — green means genuinely reachable, not just
 - **CLOUDFLARE_API_TOKEN**: rotate in the Cloudflare dashboard, update the
   GitHub secret, re-run `deploy.yml` — Caddy picks it up on next container
   recreate, no manual cert re-issuance needed.
+- **TS_AUTHKEY**: created with `--expiration 90d` (step 11), it actually
+  expires — every `tofu apply`/`tofu plan`/`ansible-deploy-proxy` run
+  reuses it to join the tailnet, so once it lapses those jobs start
+  failing with an auth error, not something more obviously "the key is
+  dead." Nothing rotates this for you — mint a new one the same way
+  (`headscale preauthkeys create --reusable --expiration 90d --ephemeral`)
+  before it expires, and `gh secret set TS_AUTHKEY`. No calendar reminder
+  built in yet; set one, or expect CI to tell you the hard way.
