@@ -18,6 +18,16 @@
 # Ansible's tailscale role still runs afterward and is a no-op (already
 # joined) — kept for idempotency, not removed.
 #
+# vendor_data_file_id below, NOT user_data_file_id — found the hard way,
+# by watching a real run get "Permission denied (publickey)" even though
+# the VM was genuinely reachable: a custom user-data file completely
+# REPLACES Proxmox's own generated cloud-init user-data (the part that
+# creates the deploy user and installs ssh_public_key from the
+# user_account block below), not merges with it. vendor-data is a
+# separate slot Proxmox never touches itself, so it layers alongside
+# user_account instead of silently overriding it — one source of truth
+# for the SSH key (user_account), not two copies of it.
+#
 # The auth key does sit briefly in this snippet file in plaintext on
 # Proxmox's storage — accepted on purpose: it's the same one-shot,
 # 1-hour-expiration key from SETUP.md step 11/13, minted specifically
@@ -93,6 +103,6 @@ resource "proxmox_virtual_environment_vm" "proxy" {
       keys     = [var.ssh_public_key]
     }
 
-    user_data_file_id = proxmox_virtual_environment_file.proxy_cloud_init[0].id
+    vendor_data_file_id = proxmox_virtual_environment_file.proxy_cloud_init[0].id
   }
 }

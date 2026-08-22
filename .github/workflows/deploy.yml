@@ -252,15 +252,25 @@ jobs:
       - name: Wait for the reverse proxy server VM to appear on the tailnet
         # Cloud-init + tailscaled installing/joining takes longer than the
         # VM merely existing per OpenTofu — poll instead of assuming.
+        #
+        # Bug found by actually reading a run's logs, not just its green
+        # checkmark: the loop below used to have no failure path — after
+        # 30 failed attempts it just fell through and exited 0, so this
+        # step showed green even when the VM never joined the tailnet at
+        # all. The real failure only showed up two steps later, as a much
+        # less obvious Ansible "could not resolve hostname" error. Now
+        # fails loudly here instead, where the actual problem is.
         run: |
           for i in $(seq 1 30); do
             if ping -c1 -W2 "${{ needs.tofu-apply.outputs.proxy_vm_name }}.${{ env.TAILNET_BASE_DOMAIN }}" >/dev/null 2>&1; then
               echo "Host is reachable"
-              break
+              exit 0
             fi
             echo "Attempt $i/30: not reachable yet, retrying in 10s..."
             sleep 10
           done
+          echo "::error::${{ needs.tofu-apply.outputs.proxy_vm_name }}.${{ env.TAILNET_BASE_DOMAIN }} never became reachable after 30 attempts — the VM's cloud-init tailscale join likely failed. Check its console/log in Proxmox."
+          exit 1
 
       - name: Write the inventory
         run: |
