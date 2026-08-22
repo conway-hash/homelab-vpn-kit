@@ -185,7 +185,12 @@ jobs:
           exit 1
 
   ansible-deploy-proxy:
-    needs: tofu-apply
+    # Not just tofu-apply: ansible-deploy-coordination's role recreates the
+    # headscale/headplane/caddy containers every run (recreate: always),
+    # which bounces headscale briefly even when nothing changed. Running
+    # in parallel meant the proxy VM's tailnet join could race that bounce.
+    # Sequencing after coordination succeeds removes the race.
+    needs: [tofu-apply, ansible-deploy-coordination]
     # Nothing to deploy until the Proxmox VM is being managed at all, and on
     # a first-ever bootstrap the tailnet this job joins doesn't exist yet.
     if: vars.ENABLE_PROXY == 'true'
