@@ -294,7 +294,7 @@ a cert and come up cleanly — green means genuinely reachable, not just
 
 - **Headscale API key**: SSH in (`gcloud compute ssh coordination-server
   --tunnel-through-iap --zone=$ZONE`), delete
-  `/opt/coordination-stack/headplane/.api_key`, re-run the `deploy` workflow.
+  `/opt/coordination_server_stack/headplane/.api_key`, re-run the `deploy` workflow.
 - **Headplane cookie secret**: same idea, delete `.cookie_secret` instead —
   this invalidates existing Headplane sessions.
 - **Google OIDC client secret**: rotate in Google Cloud Console, then

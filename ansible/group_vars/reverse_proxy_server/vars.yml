@@ -1,5 +1,5 @@
 ---
-stack_dir: /opt/proxy
+stack_dir: /opt/reverse_proxy_server_stack
 caddy_version: "2.11.4"
 
 # Deliberately short and NOT matching this repo's own (long) name — this
