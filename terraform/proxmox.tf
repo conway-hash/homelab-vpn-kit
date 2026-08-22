@@ -18,15 +18,12 @@
 # Ansible's tailscale role still runs afterward and is a no-op (already
 # joined) — kept for idempotency, not removed.
 #
-# vendor_data_file_id below, NOT user_data_file_id — found the hard way,
-# by watching a real run get "Permission denied (publickey)" even though
-# the VM was genuinely reachable: a custom user-data file completely
-# REPLACES Proxmox's own generated cloud-init user-data (the part that
-# creates the deploy user and installs ssh_public_key from the
-# user_account block below), not merges with it. vendor-data is a
-# separate slot Proxmox never touches itself, so it layers alongside
-# user_account instead of silently overriding it — one source of truth
-# for the SSH key (user_account), not two copies of it.
+# user_data_file_id, not vendor_data_file_id — reverted back after that
+# didn't pan out either. A custom user-data file DOES replace Proxmox's
+# own generated one (that part was correct and real), so this file is now
+# the single, complete source of truth for the VM's user/SSH-key setup —
+# not split across this file and the (now removed) native user_account
+# block, which would just be two places declaring the same thing again.
 #
 # The auth key does sit briefly in this snippet file in plaintext on
 # Proxmox's storage — accepted on purpose: it's the same one-shot,
@@ -43,6 +40,14 @@ resource "proxmox_virtual_environment_file" "proxy_cloud_init" {
     file_name = "proxy-cloud-init.yaml"
     data      = <<-EOT
       #cloud-config
+      users:
+        - name: ${var.ssh_user}
+          groups: sudo
+          shell: /bin/bash
+          sudo: "ALL=(ALL) NOPASSWD:ALL"
+          lock_passwd: true
+          ssh_authorized_keys:
+            - ${var.ssh_public_key}
       runcmd:
         - curl -fsSL https://tailscale.com/install.sh | sh
         - tailscale up --login-server=${var.headscale_server_url} --authkey=${var.proxy_tailscale_authkey} --hostname=${var.proxy_vm_name}
@@ -98,11 +103,10 @@ resource "proxmox_virtual_environment_vm" "proxy" {
       }
     }
 
-    user_account {
-      username = var.ssh_user
-      keys     = [var.ssh_public_key]
-    }
-
-    vendor_data_file_id = proxmox_virtual_environment_file.proxy_cloud_init[0].id
+    # No user_account block — the custom user-data file above is now the
+    # single source of truth for the deploy user + SSH key, since a custom
+    # user-data file replaces this native block entirely rather than
+    # merging with it.
+    user_data_file_id = proxmox_virtual_environment_file.proxy_cloud_init[0].id
   }
 }
