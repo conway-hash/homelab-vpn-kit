@@ -229,9 +229,29 @@ scope it to only that.
 
 ## 10. Reverse proxy server VM (Proxmox) — Proxmox API token
 
-Datacenter → Permissions → API Tokens → Add. Give the token's user a role
-limited to VM/storage management (`PVEVMAdmin` or a custom role), not
-`Administrator`. Note the full token string: `user@realm!tokenid=uuid`.
+**1. Create a dedicated user first** (Datacenter → Permissions → Users →
+Add) — don't issue this token under `root@pam`. Realm `pve` (Proxmox's own
+built-in auth, not PAM) is simplest since it doesn't need a real system
+account: e.g. `terraform@pve`.
+
+**2. Grant it two built-in roles, not one** (Datacenter → Permissions →
+Add → User Permission, path `/`, for this user): `PVEVMAdmin` **and**
+`PVEDatastoreAdmin`. `PVEVMAdmin` alone is not enough — it covers creating
+and configuring the VM, but not `Datastore.AllocateTemplate`, which is
+what's needed to pull the Ubuntu cloud image onto storage
+(`proxmox_download_file`). Found this the hard way by actually checking
+Proxmox's permission model rather than assuming one role covered it.
+
+**3. Then Datacenter → Permissions → API Tokens → Add:**
+- User: the one you just created
+- Token ID: anything descriptive, e.g. `github-actions`
+- Privilege Separation: **uncheck it** — the token then just inherits the
+  user's already-scoped roles directly, no separate token-level grant step
+- Expire: `never` is fine here, same reasoning as `TS_AUTHKEY`'s 99y — a
+  narrowly-scoped credential that only ever lives as a GitHub secret never
+  exposed to forks
+
+Note the full token string it shows you **once**: `user@realm!tokenid=uuid`.
 
 ## 11. Two Headscale pre-auth keys — these are NOT interchangeable
 
