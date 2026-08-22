@@ -46,32 +46,6 @@
         state: present
         sysctl_set: true
 
-    # One-time migration: stack_dir moved from /opt/coordination-stack to
-    # {{ stack_dir }} when the coordination_stack role was renamed to
-    # coordination_server_stack. Without this, the old compose project
-    # would keep running untouched and fight the new one for ports 80/443.
-    # Headscale's actual state (/etc/headscale, /var/lib/headscale) is a
-    # host bind mount OUTSIDE the old stack_dir, so it's untouched by
-    # this — only the old compose project itself is torn down. Safe to
-    # leave in place after the migration; it's a no-op once the old
-    # directory is gone.
-    - name: Check for the pre-rename stack directory
-      ansible.builtin.stat:
-        path: /opt/coordination-stack
-      register: old_stack_dir
-
-    - name: Tear down the pre-rename docker compose project, if present
-      community.docker.docker_compose_v2:
-        project_src: /opt/coordination-stack
-        state: absent
-      when: old_stack_dir.stat.exists
-
-    - name: Remove the pre-rename stack directory
-      ansible.builtin.file:
-        path: /opt/coordination-stack
-        state: absent
-      when: old_stack_dir.stat.exists
-
   roles:
     - docker
     - coordination_server_stack

@@ -23,6 +23,12 @@ jobs:
     defaults:
       run:
         working-directory: terraform
+    # TF_VAR_ — not -var="...${{ secrets.SSH_PRIVATE_KEY }}..." — a PEM key
+    # is multi-line and would break the -var quoting. Terraform picks up
+    # TF_VAR_<name> env vars automatically. Only the proxmox provider's ssh
+    # block (providers.tf) actually uses this.
+    env:
+      TF_VAR_ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
     outputs:
       instance_name: ${{ steps.out.outputs.instance_name }}
       zone: ${{ steps.out.outputs.zone }}

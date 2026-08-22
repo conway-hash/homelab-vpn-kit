@@ -50,9 +50,25 @@ variable "ssh_user" {
 }
 
 variable "ssh_public_key" {
-  description = "Public half of the SSH keypair Ansible uses to reach both VMs. The private half never touches this repo — it lives only as the SSH_PRIVATE_KEY GitHub secret. Shared across GCP and Proxmox on purpose — one keypair, one secret, not two."
+  description = "Public half of the SSH keypair Ansible uses to reach both VMs. Shared across GCP and Proxmox on purpose — one keypair, not two."
   type        = string
   sensitive   = true
+}
+
+variable "ssh_private_key" {
+  description = <<-EOT
+    Same keypair as ssh_public_key — the SSH_PRIVATE_KEY secret, not a new
+    one. Only OpenTofu itself needs it (not Ansible, which writes its own
+    copy to a file): the proxmox provider's ssh block uses it to reach the
+    Proxmox node directly for snippet uploads (see providers.tf). Requires
+    this key to also be authorized for root SSH on the Proxmox HOST itself
+    — separate from it being placed inside the reverse proxy server VM's
+    own cloud-init user_account, which is a different, unrelated use of
+    the same key. Empty is fine while enable_proxy is false.
+  EOT
+  type        = string
+  sensitive   = true
+  default     = ""
 }
 
 # --- Proxmox / reverse proxy server VM ----------------------------------
