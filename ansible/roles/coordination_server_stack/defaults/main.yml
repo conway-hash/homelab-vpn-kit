@@ -1,0 +1,23 @@
+---
+# stack_dir/headscale_version/headplane_version/caddy_version are declared
+# exactly once, in group_vars/coordination_server/vars.yml — not restated
+# here. Only vars with no safe default (must be explicitly supplied or the
+# assert in tasks/main.yml refuses to deploy) — plus this one computed
+# value — live in this file.
+
+# The bare hostname, derived from headscale_server_url (group_vars/all)
+# rather than declared separately — domain and headscale_server_url used
+# to both hardcode "vpn.conway-hash.com" independently, which is exactly
+# the kind of drift-risk this repo's conventions exist to prevent.
+domain: "{{ headscale_server_url | urlsplit('hostname') }}"
+
+# Shared between headscale's own OIDC (tailnet client login) and Headplane's
+# OIDC (admin UI login) — one Google OAuth client, two redirect URIs
+# registered against it. See SETUP.md.
+oidc_client_id: ""
+oidc_client_secret: ""
+
+# REQUIRED, no safe default: any Google account could join the tailnet
+# otherwise. List of emails allowed to authenticate a tailscale client
+# against this headscale server.
+oidc_allowed_users: []

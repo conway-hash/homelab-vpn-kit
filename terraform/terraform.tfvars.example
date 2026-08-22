@@ -8,6 +8,28 @@ zone          = "europe-west1-b"
 instance_name = "coordination-server"
 machine_type  = "e2-small"
 
-# ssh_public_key is deliberately left unset here. Generate a keypair
-# (see SETUP.md) and pass the public half explicitly:
-#   tofu apply -var="ssh_public_key=$(cat deploy_key.pub)"
+# Must match tailnet_base_domain in ansible/group_vars/all/vars.yml — that
+# file is the authoritative declaration, this is a copy only because
+# Terraform can't read it. CI passes it straight from there and never asks
+# you to retype it.
+tailnet_base_domain = "ts.yourdomain.com"
+
+# false until the Proxmox side is actually set up (SETUP.md steps 9-12);
+# with it false, tofu manages the GCP coordination server alone.
+enable_proxy = false
+
+# proxmox_host is the short tailnet hostname of the Proxmox box; the API
+# endpoint is built as https://<proxmox_host>.<tailnet_base_domain>:8006/.
+proxmox_host           = "pve"
+proxmox_node           = "pve"
+proxmox_storage_pool   = "local-lvm"
+proxmox_network_bridge = "vmbr0"
+proxy_vm_id            = 9000
+proxy_vm_name          = "proxy"
+proxy_cores            = 2
+proxy_memory_mb        = 1024
+proxy_disk_gb          = 8
+
+# ssh_public_key, proxmox_api_token are deliberately left unset here.
+# Generate a keypair (see SETUP.md) and pass the public half explicitly:
+#   tofu apply -var="ssh_public_key=$(cat deploy_key.pub)" -var="proxmox_api_token=..."

@@ -1,3 +1,7 @@
+{
+    email {{ acme_email }}
+}
+
 {{ domain }} {
     handle /admin* {
         reverse_proxy headplane:3000

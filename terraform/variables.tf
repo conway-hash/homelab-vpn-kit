@@ -50,7 +50,102 @@ variable "ssh_user" {
 }
 
 variable "ssh_public_key" {
-  description = "Public half of the SSH keypair Ansible uses to reach the VM over the IAP tunnel. The private half never touches this repo — it lives only as the SSH_PRIVATE_KEY GitHub secret."
+  description = "Public half of the SSH keypair Ansible uses to reach both VMs. The private half never touches this repo — it lives only as the SSH_PRIVATE_KEY GitHub secret. Shared across GCP and Proxmox on purpose — one keypair, one secret, not two."
   type        = string
   sensitive   = true
+}
+
+# --- Proxmox / reverse proxy server VM ----------------------------------
+
+variable "enable_proxy" {
+  description = <<-EOT
+    Whether to manage the Proxmox reverse proxy server VM. Defaults to false
+    so a brand-new copy of this repo can bootstrap the GCP coordination
+    server alone — the Proxmox API and the tailnet it lives on don't exist
+    yet at that point, and the pre-auth key CI needs to join the tailnet is
+    minted ON the coordination server, so the first deploy has to be able to
+    run without any of it. Flip the ENABLE_PROXY repo variable to "true" once
+    SETUP.md steps 9-12 are done. See SETUP.md's bootstrap-order note.
+  EOT
+  type        = bool
+  default     = false
+}
+
+variable "tailnet_base_domain" {
+  description = <<-EOT
+    MagicDNS base domain for the tailnet, e.g. ts.conway-hash.com. Do not
+    hand-set this in CI — every workflow reads it out of
+    ansible/group_vars/all/vars.yml, which is the single authoritative
+    declaration. It's an input here only because Terraform can't read that
+    file itself.
+  EOT
+  type        = string
+}
+
+variable "proxmox_host" {
+  description = <<-EOT
+    The Proxmox host's own tailnet hostname — just the short name, not a
+    FQDN. The API endpoint is built from this plus tailnet_base_domain
+    (https://<proxmox_host>.<tailnet_base_domain>:8006/) rather than stored
+    as a whole URL, so the domain can't drift from group_vars/all/vars.yml.
+    Usually the same string as proxmox_node, but not necessarily — one is a
+    DNS name, the other is a Proxmox cluster node name.
+  EOT
+  type        = string
+  default     = "pve"
+}
+
+variable "proxmox_api_token" {
+  description = "Proxmox API token, format 'user@realm!tokenid=uuid'. Scope it to just what VM creation needs — see SETUP.md. Empty is fine while enable_proxy is false."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "proxmox_node" {
+  description = "Proxmox node name the reverse proxy server VM is created on."
+  type        = string
+  default     = "pve"
+}
+
+variable "proxmox_storage_pool" {
+  description = "Storage ID used for both the downloaded cloud image and the reverse proxy server VM's disk."
+  type        = string
+  default     = "local-lvm"
+}
+
+variable "proxmox_network_bridge" {
+  description = "Proxmox network bridge the reverse proxy server VM's NIC attaches to."
+  type        = string
+  default     = "vmbr0"
+}
+
+variable "proxy_vm_id" {
+  description = "Proxmox VM ID for the reverse proxy server VM. Pick one that isn't already in use on this node."
+  type        = number
+  default     = 9000
+}
+
+variable "proxy_vm_name" {
+  description = "Reverse proxy server VM name — also becomes its tailnet hostname, deliberately short (see ansible/group_vars/reverse_proxy_server/vars.yml)."
+  type        = string
+  default     = "proxy"
+}
+
+variable "proxy_cores" {
+  description = "vCPU cores for the reverse proxy server VM. Caddy is light — intentionally small."
+  type        = number
+  default     = 2
+}
+
+variable "proxy_memory_mb" {
+  description = "RAM in MB for the reverse proxy server VM."
+  type        = number
+  default     = 1024
+}
+
+variable "proxy_disk_gb" {
+  description = "Disk size in GB for the reverse proxy server VM."
+  type        = number
+  default     = 8
 }

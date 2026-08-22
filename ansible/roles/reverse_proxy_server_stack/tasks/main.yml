@@ -1,0 +1,54 @@
+---
+- name: Refuse to deploy without ACME DNS-01 credentials
+  ansible.builtin.assert:
+    that:
+      - cloudflare_api_token | length > 0
+    fail_msg: >-
+      cloudflare_api_token must be set — without it Caddy can't complete the
+      DNS-01 challenge for {{ tailnet_base_domain }}. See SETUP.md.
+
+- name: Create stack directory
+  ansible.builtin.file:
+    path: "{{ stack_dir }}"
+    state: directory
+    mode: "0750"
+    owner: root
+    group: root
+
+- name: Render Dockerfile (bakes in the Cloudflare DNS-01 plugin via xcaddy)
+  ansible.builtin.template:
+    src: Dockerfile.j2
+    dest: "{{ stack_dir }}/Dockerfile"
+    mode: "0644"
+
+- name: Render Caddyfile
+  ansible.builtin.template:
+    src: Caddyfile.j2
+    dest: "{{ stack_dir }}/Caddyfile"
+    mode: "0644"
+  # No notify/handler here on purpose — same reasoning as coordination_server_stack:
+  # a bind-mounted file changing on disk is invisible to compose's own
+  # change detection. `recreate: always` below is what actually guarantees
+  # the container picks up whatever was just rendered.
+
+- name: Render docker-compose.yml
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ stack_dir }}/docker-compose.yml"
+    mode: "0640"
+
+- name: Write the Cloudflare token as a compose env file (root-only)
+  # Compose auto-loads .env from project_src — keeps the token out of the
+  # rendered compose file itself and out of any config-drift diffing of it.
+  ansible.builtin.copy:
+    dest: "{{ stack_dir }}/.env"
+    content: "CLOUDFLARE_API_TOKEN={{ cloudflare_api_token }}\n"
+    mode: "0600"
+  no_log: true
+
+- name: Build + bring up the reverse proxy
+  community.docker.docker_compose_v2:
+    project_src: "{{ stack_dir }}"
+    state: present
+    build: always
+    recreate: always

@@ -1,0 +1,21 @@
+# Managed by Ansible — edits will be overwritten
+services:
+  caddy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: proxy-caddy:{{ caddy_version }}
+    container_name: caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    volumes:
+      - {{ stack_dir }}/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:

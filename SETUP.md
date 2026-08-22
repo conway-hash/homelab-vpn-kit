@@ -4,6 +4,28 @@ Everything here is run **once**, by a human, from a machine with `gcloud` and
 `gh` installed and authenticated. After this, pushes/PRs to this repo do all
 the work.
 
+## This repo now also deploys the tailnet's reverse proxy server (Proxmox, home network)
+
+No separate repo, no shared collection to install — it's one repo now, so
+`tailnet_base_domain`/`headscale_server_url` just live in
+`ansible/group_vars/all/vars.yml` directly. Steps 0-8 are the GCP
+coordination server; steps 9-13 add the reverse proxy server's VM.
+
+**Run them in that order, and don't skip ahead.** The two halves are
+sequenced on purpose, not just for tidiness: CI joins the tailnet with a
+Headscale pre-auth key (`TS_AUTHKEY`), and that key can only be minted by
+running `headscale preauthkeys create` **on the coordination server** — which
+step 8 is what creates. So the Proxmox half genuinely cannot be set up until
+the GCP half is live.
+
+That's why `ENABLE_PROXY` exists. Until you set that repo variable to
+`true` (step 12), `tofu` manages the GCP coordination server alone: the
+Proxmox resources are counted out to zero, the tailnet-join steps are
+skipped, and the `ansible-deploy-proxy` job doesn't run. Step 8's first
+deploy therefore needs none of the Proxmox, Cloudflare, or Tailscale
+secrets — a fresh copy of this repo can get to a working coordination
+server with nothing but steps 0-8.
+
 ## Staying inside GCP's Always Free tier
 
 This repo's defaults (`terraform/variables.tf`) target Compute Engine's
@@ -32,8 +54,9 @@ Always Free allowance:
 ```bash
 export PROJECT_ID="your-gcp-project-id"        # must not already exist, or already be yours
 export BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"  # gcloud billing accounts list
-export REPO="conway-hash/headscale-coordination-server-vpn" # GitHub owner/repo
-export DOMAIN="vpn.conway-hash.com"            # public hostname Caddy serves
+export REPO="conway-hash/homelab-vpn-kit" # GitHub owner/repo
+export DOMAIN="vpn.conway-hash.com"            # must match headscale_server_url's hostname in ansible/group_vars/all/vars.yml
+export TAILNET_DOMAIN="ts.conway-hash.com"     # must match tailnet_base_domain in ansible/group_vars/all/vars.yml
 export REGION="us-central1"                    # Always Free tier: us-west1 | us-central1 | us-east1 only
 export ZONE="us-central1-a"
 export SA_NAME="gh-actions-deployer"
@@ -167,9 +190,14 @@ gh variable set GCP_REGION                 --body "$REGION" -R "$REPO"
 gh variable set GCP_ZONE                   --body "$ZONE" -R "$REPO"
 gh variable set INSTANCE_NAME              --body "coordination-server" -R "$REPO"
 gh variable set MACHINE_TYPE               --body "e2-micro" -R "$REPO"
-gh variable set DOMAIN                     --body "$DOMAIN" -R "$REPO"
 gh variable set HEADSCALE_ALLOWED_OIDC_USERS --body "$ALLOWED_USERS" -R "$REPO"
 ```
+
+No `DOMAIN` variable here on purpose — `deploy.yml` derives it from
+`headscale_server_url` in `ansible/group_vars/all/vars.yml` at run time,
+same as `HEADSCALE_SERVER_URL`/`TAILNET_BASE_DOMAIN`. The `$DOMAIN` you
+exported above is only for the commands in this file — make sure it
+actually matches what you put in `group_vars/all/vars.yml`.
 
 Now delete `deploy_key` and `deploy_key.pub` from your local disk — they're
 in GitHub Secrets now and don't need to exist anywhere else.
@@ -189,6 +217,79 @@ in GitHub Secrets now and don't need to exist anywhere else.
    browser for the same Google login, checked against
    `HEADSCALE_ALLOWED_OIDC_USERS`.
 
+## 9. Reverse proxy server VM (Proxmox) — Cloudflare DNS-01 token
+
+Cloudflare dashboard → My Profile → API Tokens → Create Token → custom:
+
+- Permission: `Zone / DNS / Edit`
+- Zone Resources: `Include / Specific zone / conway-hash.com`
+
+Nothing broader — this token can create/delete DNS records on that zone,
+scope it to only that.
+
+## 10. Reverse proxy server VM (Proxmox) — Proxmox API token
+
+Datacenter → Permissions → API Tokens → Add. Give the token's user a role
+limited to VM/storage management (`PVEVMAdmin` or a custom role), not
+`Administrator`. Note the full token string: `user@realm!tokenid=uuid`.
+
+## 11. Two Headscale pre-auth keys — these are NOT interchangeable
+
+Run on the coordination server itself (`gcloud compute ssh coordination-server --tunnel-through-iap --zone=$ZONE`, then `docker exec headscale headscale preauthkeys create ...`):
+
+```bash
+# CI runner joins: short-lived, reusable, ephemeral (cleans itself up)
+headscale preauthkeys create --reusable --expiration 90d --ephemeral
+# → TS_AUTHKEY secret
+
+# Reverse proxy server VM's own join: must persist, so NOT ephemeral
+headscale preauthkeys create --expiration 1h
+# → PROXY_NODE_TS_AUTHKEY secret (used once, on first deploy)
+```
+
+Using `--ephemeral` for the reverse proxy server VM by mistake means
+Headscale deregisters it the moment it briefly drops off the tailnet — don't.
+
+## 12. Push the reverse proxy server's secrets/variables
+
+```bash
+gh secret set TS_AUTHKEY             --body "PASTE_CI_KEY" -R "$REPO"
+gh secret set PROXY_NODE_TS_AUTHKEY  --body "PASTE_PROXY_KEY" -R "$REPO"
+gh secret set CLOUDFLARE_API_TOKEN   --body "PASTE_CF_TOKEN" -R "$REPO"
+gh secret set PROXMOX_API_TOKEN      --body "user@realm!tokenid=uuid" -R "$REPO"
+
+gh variable set PROXMOX_HOST --body "pve" -R "$REPO"  # <-- your Proxmox box's tailnet hostname, short name only
+gh variable set PROXMOX_NODE --body "pve" -R "$REPO"  # <-- its Proxmox cluster node name
+
+# Last: flips the reverse proxy server on. Until this is "true", every
+# workflow above treats the Proxmox half as not existing.
+gh variable set ENABLE_PROXY --body "true" -R "$REPO"
+```
+
+`PROXMOX_HOST` is deliberately just the short hostname, not a URL — the API
+endpoint is assembled as `https://$PROXMOX_HOST.<tailnet_base_domain>:8006/`
+with the base domain read from `ansible/group_vars/all/vars.yml`. Storing the
+whole URL here would mean a second copy of the base domain that could drift
+from the real one (and, in an earlier draft of this file, produced a
+`pve.ts.ts.conway-hash.com` that resolved nowhere).
+
+Also fill in `acme_email` (shared by both Caddys) in `ansible/group_vars/all/vars.yml`
+— it's currently a placeholder — and commit that (it's not a secret).
+
+**Not needed as secrets/variables**: `HEADSCALE_SERVER_URL` /
+`TAILNET_BASE_DOMAIN`. Every workflow reads those straight out of
+`ansible/group_vars/all/vars.yml` at run time — nothing to retype, no way
+for a copy to drift from the real value, since there's only one repo now.
+
+## 13. First reverse proxy server deploy
+
+Push to `main` (or run `deploy.yml` manually) once steps 9-12 are done. The
+`ansible-deploy-proxy` job's last step curls
+`https://proxy.ts.conway-hash.com/` — the VM's own MagicDNS name, which is
+what the wildcard cert actually covers — and fails loudly if Caddy didn't get
+a cert and come up cleanly — green means genuinely reachable, not just
+"ansible said ok."
+
 ## Rotating things
 
 - **Headscale API key**: SSH in (`gcloud compute ssh coordination-server
@@ -199,3 +300,10 @@ in GitHub Secrets now and don't need to exist anywhere else.
 - **Google OIDC client secret**: rotate in Google Cloud Console, then
   `gh secret set GOOGLE_OIDC_CLIENT_SECRET --body "NEW_VALUE" -R "$REPO"` and
   re-run the deploy workflow.
+- **PROXY_NODE_TS_AUTHKEY**: only used on the reverse proxy server VM's first join — rotating
+  it does nothing until the VM is recreated. To force a rejoin, mint a new
+  non-ephemeral key (step 11) and re-run `deploy.yml` after removing the old
+  Tailscale state on the box (`tailscale logout` over SSH, then redeploy).
+- **CLOUDFLARE_API_TOKEN**: rotate in the Cloudflare dashboard, update the
+  GitHub secret, re-run `deploy.yml` — Caddy picks it up on next container
+  recreate, no manual cert re-issuance needed.

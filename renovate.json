@@ -13,8 +13,7 @@
       "customType": "regex",
       "description": "Headscale image version, pinned as a var rather than in the (templated) docker-compose file Renovate can't parse.",
       "managerFilePatterns": [
-        "/^ansible/group_vars/all/vars\\.yml$/",
-        "/^ansible/roles/coordination_stack/defaults/main\\.yml$/"
+        "/^ansible/group_vars/coordination_server/vars\\.yml$/"
       ],
       "matchStrings": [
         "headscale_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"
@@ -26,8 +25,7 @@
       "customType": "regex",
       "description": "Headplane image version, same reasoning.",
       "managerFilePatterns": [
-        "/^ansible/group_vars/all/vars\\.yml$/",
-        "/^ansible/roles/coordination_stack/defaults/main\\.yml$/"
+        "/^ansible/group_vars/coordination_server/vars\\.yml$/"
       ],
       "matchStrings": [
         "headplane_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"
@@ -37,10 +35,21 @@
     },
     {
       "customType": "regex",
-      "description": "Caddy image version, same reasoning.",
+      "description": "Caddy image version on the coordination server. Pinned separately from the reverse proxy server's own Caddy — independently upgradable, deliberately not shared.",
       "managerFilePatterns": [
-        "/^ansible/group_vars/all/vars\\.yml$/",
-        "/^ansible/roles/coordination_stack/defaults/main\\.yml$/"
+        "/^ansible/group_vars/coordination_server/vars\\.yml$/"
+      ],
+      "matchStrings": [
+        "caddy_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "caddy"
+    },
+    {
+      "customType": "regex",
+      "description": "Caddy image version on the reverse proxy server VM. Separate pin from the coordination server's Caddy — see that entry's note.",
+      "managerFilePatterns": [
+        "/^ansible/group_vars/reverse_proxy_server/vars\\.yml$/"
       ],
       "matchStrings": [
         "caddy_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"

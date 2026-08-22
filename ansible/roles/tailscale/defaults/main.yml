@@ -1,0 +1,5 @@
+---
+# REQUIRED, no safe default — generate on this coordination server with
+# `headscale preauthkeys create`. Non-ephemeral for anything meant to
+# persist; --ephemeral is only correct for throwaway CI joins. See SETUP.md.
+tailscale_authkey: ""

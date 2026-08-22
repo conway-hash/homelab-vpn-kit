@@ -11,8 +11,11 @@ terraform/crash.log*
 
 # Ansible
 ansible/inventory/hosts.ini
-ansible/group_vars/all/secrets.yml
+ansible/group_vars/*/secrets.yml
 ansible/*.retry
+
+# Rendered on the edge VM, never meant to live in git even locally
+**/.env
 
 # Locally generated deploy keypair, if you make one outside SETUP.md's flow
 deploy_key

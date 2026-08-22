@@ -1,4 +1,4 @@
-name: Deploy Coordination Server
+name: Deploy coordination server + reverse proxy server
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: deploy-coordination-server
+  group: deploy-coordination-and-proxy
   cancel-in-progress: false
 
 jobs:
@@ -26,7 +26,7 @@ jobs:
     outputs:
       instance_name: ${{ steps.out.outputs.instance_name }}
       zone: ${{ steps.out.outputs.zone }}
-      external_ip: ${{ steps.out.outputs.external_ip }}
+      proxy_vm_name: ${{ steps.out.outputs.proxy_vm_name }}
     steps:
       - uses: actions/checkout@v7
 
@@ -38,6 +38,25 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
+
+      - name: Read tailnet vars from this repo
+        run: |
+          {
+            echo "HEADSCALE_SERVER_URL=$(grep '^headscale_server_url:' ../ansible/group_vars/all/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')"
+            echo "TAILNET_BASE_DOMAIN=$(grep '^tailnet_base_domain:' ../ansible/group_vars/all/vars.yml | sed 's/^tailnet_base_domain:[[:space:]]*//; s/[[:space:]]*#.*$//')"
+          } >> "$GITHUB_ENV"
+
+      # Needed so `tofu apply` can reach Proxmox's tailnet-only API for the
+      # reverse proxy server VM resources. The GCP resources don't need it,
+      # and on a first-ever bootstrap it can't work at all — the tailnet's
+      # coordination server is what this very run is creating, and TS_AUTHKEY
+      # is minted on it afterwards. Skipped until ENABLE_PROXY is "true".
+      - if: vars.ENABLE_PROXY == 'true'
+        uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --login-server=${{ env.HEADSCALE_SERVER_URL }}
+          hostname: ci-tofu-apply
 
       - name: tofu init
         run: |
@@ -53,15 +72,22 @@ jobs:
             -var="zone=${{ vars.GCP_ZONE }}" \
             -var="instance_name=${{ vars.INSTANCE_NAME }}" \
             -var="machine_type=${{ vars.MACHINE_TYPE }}" \
-            -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}"
+            -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" \
+            -var="enable_proxy=${{ vars.ENABLE_PROXY == 'true' }}" \
+            -var="tailnet_base_domain=${{ env.TAILNET_BASE_DOMAIN }}" \
+            -var="proxmox_host=${{ vars.PROXMOX_HOST || 'pve' }}" \
+            -var="proxmox_api_token=${{ secrets.PROXMOX_API_TOKEN }}" \
+            -var="proxmox_node=${{ vars.PROXMOX_NODE || 'pve' }}"
 
       - id: out
         run: |
-          echo "instance_name=$(tofu output -raw instance_name)" >> "$GITHUB_OUTPUT"
-          echo "zone=$(tofu output -raw zone)" >> "$GITHUB_OUTPUT"
-          echo "external_ip=$(tofu output -raw external_ip)" >> "$GITHUB_OUTPUT"
+          {
+            echo "instance_name=$(tofu output -raw instance_name)"
+            echo "zone=$(tofu output -raw zone)"
+            echo "proxy_vm_name=$(tofu output -raw proxy_vm_name)"
+          } >> "$GITHUB_OUTPUT"
 
-  ansible-deploy:
+  ansible-deploy-coordination:
     needs: tofu-apply
     runs-on: ubuntu-latest
     defaults:
@@ -91,6 +117,7 @@ jobs:
 
       - name: Write CI-only secrets vars (never committed)
         run: |
+          mkdir -p group_vars/coordination_server
           {
             echo "oidc_client_id: \"${{ secrets.GOOGLE_OIDC_CLIENT_ID }}\""
             echo "oidc_client_secret: \"${{ secrets.GOOGLE_OIDC_CLIENT_SECRET }}\""
@@ -99,15 +126,9 @@ jobs:
             for u in "${USERS[@]}"; do
               echo "  - \"$u\""
             done
-          } > group_vars/all/secrets.yml
+          } > group_vars/coordination_server/secrets.yml
 
       - name: Open one persistent IAP tunnel for the whole job
-        # A stdin-piped ProxyCommand re-invoked per SSH connection (the
-        # earlier approach) turned out to interact badly with
-        # ControlPersist's backgrounding — first task alone took 2+ minutes.
-        # A single local port-forward, opened once and reused by every plain
-        # SSH connection Ansible makes, is the standard pattern and avoids
-        # that entirely.
         run: |
           nohup gcloud compute start-iap-tunnel \
             "${{ needs.tofu-apply.outputs.instance_name }}" 22 \
@@ -134,23 +155,135 @@ jobs:
           mkdir -p /tmp/ansible-cp
 
       - name: Run playbook
+        # No -e "domain=..." — domain is computed inside the playbook itself
+        # now (coordination_server_stack's defaults derive it from
+        # headscale_server_url), not passed in from a second copy in CI.
+        run: ansible-playbook site.yml --limit coordination_server
+
+      - name: Read the domain for the smoke test
+        # Same source as everywhere else — headscale_server_url in this
+        # repo's group_vars/all/vars.yml — not a separate GitHub Actions
+        # variable holding a second copy of it.
         run: |
-          ansible-playbook playbook.yml -e "domain=${{ vars.DOMAIN }}"
+          URL=$(grep '^headscale_server_url:' group_vars/all/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')
+          echo "COORDINATION_DOMAIN=${URL#https://}" >> "$GITHUB_ENV"
 
       - name: Smoke test the public endpoint
-        # Ansible reporting "ok" only means the containers came up — it says
-        # nothing about whether Caddy actually got a valid cert or the site
-        # is reachable the way a real user hits it. This is the one check
-        # that actually looks from the outside in.
         run: |
           for i in $(seq 1 10); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://${{ vars.DOMAIN }}/" || echo "000")
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://${{ env.COORDINATION_DOMAIN }}/" || echo "000")
             if [ "$code" = "200" ]; then
-              echo "OK: https://${{ vars.DOMAIN }}/ returned 200"
+              echo "OK: https://${{ env.COORDINATION_DOMAIN }}/ returned 200"
               exit 0
             fi
             echo "Attempt $i/10: got HTTP $code, retrying in 10s..."
             sleep 10
           done
-          echo "::error::https://${{ vars.DOMAIN }}/ never returned 200 after deploy"
+          echo "::error::https://${{ env.COORDINATION_DOMAIN }}/ never returned 200 after deploy"
+          exit 1
+
+  ansible-deploy-proxy:
+    needs: tofu-apply
+    # Nothing to deploy until the Proxmox VM is being managed at all, and on
+    # a first-ever bootstrap the tailnet this job joins doesn't exist yet.
+    if: vars.ENABLE_PROXY == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ansible
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read tailnet vars from this repo
+        run: |
+          {
+            echo "HEADSCALE_SERVER_URL=$(grep '^headscale_server_url:' group_vars/all/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')"
+            echo "TAILNET_BASE_DOMAIN=$(grep '^tailnet_base_domain:' group_vars/all/vars.yml | sed 's/^tailnet_base_domain:[[:space:]]*//; s/[[:space:]]*#.*$//')"
+          } >> "$GITHUB_ENV"
+
+      - uses: tailscale/github-action@v4
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          args: --login-server=${{ env.HEADSCALE_SERVER_URL }}
+          hostname: ci-ansible-deploy-proxy
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Install Ansible + collections
+        run: |
+          pipx install --include-deps ansible
+          ansible-galaxy collection install -r requirements.yml
+
+      - name: Write the deploy SSH key
+        run: |
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      # TS_AUTHKEY above is the CI runner's own throwaway join key.
+      # PROXY_NODE_TS_AUTHKEY is different on purpose: it's what the reverse
+      # proxy server VM itself uses to join, must be non-ephemeral (see the
+      # tailscale role's defaults), and should be rotated/re-minted per
+      # SETUP.md rather than reused indefinitely.
+      - name: Write CI-only secrets vars (never committed)
+        run: |
+          mkdir -p group_vars/reverse_proxy_server
+          {
+            echo "cloudflare_api_token: \"${{ secrets.CLOUDFLARE_API_TOKEN }}\""
+            echo "tailscale_authkey: \"${{ secrets.PROXY_NODE_TS_AUTHKEY }}\""
+          } > group_vars/reverse_proxy_server/secrets.yml
+
+      - name: Wait for the reverse proxy server VM to appear on the tailnet
+        # Cloud-init + tailscaled installing/joining takes longer than the
+        # VM merely existing per OpenTofu — poll instead of assuming.
+        run: |
+          for i in $(seq 1 30); do
+            if ping -c1 -W2 "${{ needs.tofu-apply.outputs.proxy_vm_name }}.${{ env.TAILNET_BASE_DOMAIN }}" >/dev/null 2>&1; then
+              echo "Host is reachable"
+              break
+            fi
+            echo "Attempt $i/30: not reachable yet, retrying in 10s..."
+            sleep 10
+          done
+
+      - name: Write the inventory
+        run: |
+          cat > inventory/hosts.ini <<INVENTORY_EOF
+          [reverse_proxy_server]
+          ${{ needs.tofu-apply.outputs.proxy_vm_name }} ansible_host=${{ needs.tofu-apply.outputs.proxy_vm_name }}.${{ env.TAILNET_BASE_DOMAIN }} ansible_user=deploy
+
+          [reverse_proxy_server:vars]
+          ansible_ssh_private_key_file=~/.ssh/deploy_key
+          ansible_ssh_common_args=-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=/tmp/ansible-cp/%C
+          INVENTORY_EOF
+          mkdir -p /tmp/ansible-cp
+
+      - name: Run playbook
+        run: ansible-playbook site.yml --limit reverse_proxy_server
+
+      - name: Smoke test the reverse proxy server
+        # Same reasoning as the coordination server's smoke test: "ansible
+        # reported ok" only means the container came up, not that Caddy
+        # actually got a valid cert and is reachable the way a real client
+        # hits it.
+        # The target is the VM's own MagicDNS name — same expression the ping
+        # check and the inventory above use. NOT the bare tailnet base
+        # domain: nothing is registered at the apex for MagicDNS to answer,
+        # and the wildcard cert Caddy holds (*.<base domain>) wouldn't match
+        # it even if something were.
+        run: |
+          PROXY_URL="https://${{ needs.tofu-apply.outputs.proxy_vm_name }}.${{ env.TAILNET_BASE_DOMAIN }}/"
+          for i in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "$PROXY_URL" || echo "000")
+            if [ "$code" = "200" ]; then
+              echo "OK: $PROXY_URL returned 200"
+              exit 0
+            fi
+            echo "Attempt $i/10: got HTTP $code, retrying in 10s..."
+            sleep 10
+          done
+          echo "::error::$PROXY_URL never returned 200 after deploy"
           exit 1

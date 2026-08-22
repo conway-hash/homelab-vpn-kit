@@ -1,7 +1,30 @@
 ---
-stack_dir: /opt/coordination-stack
-domain: vpn.conway-hash.com
+# Golden-base facts shared by both host groups in this repo. Now that the
+# coordination server and the reverse proxy server live in one repo,
+# there's no cross-repo sharing problem left to solve — these just live
+# here, once, directly.
+#
+# USING THIS AS A TEMPLATE? These are the author's real, live values —
+# change them, or your deploy will think it's serving conway-hash.com's
+# tailnet. See README.md's "Using this as a template" section.
+#
+# Keep the "change this" markers on their own line, above the value, never
+# trailing after it. CI reads these two with `grep | sed` (see
+# deploy.yml/terraform-plan.yml) and a trailing `# ...` would be captured
+# as part of the value — a malformed --login-server URL that fails as an
+# auth error three jobs later. The sed strips inline comments defensively
+# too, but don't rely on that.
+
+# <-- change this
 tailnet_base_domain: ts.conway-hash.com
-headscale_version: "0.29.3"
-headplane_version: "0.7.0"
-caddy_version: "2.11.4-alpine"
+
+# <-- change this
+headscale_server_url: https://vpn.conway-hash.com
+
+# Both Caddys (coordination server + reverse proxy server) register this
+# with Let's Encrypt — one identity, one place, so it can't drift between
+# them the way it did before this was noticed: the reverse proxy server
+# had one, the coordination server didn't.
+#
+# <-- change this
+acme_email: labs@conway-hash.com

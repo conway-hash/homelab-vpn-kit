@@ -1,0 +1,13 @@
+# Managed by Ansible — edits will be overwritten
+#
+# The stock caddy image doesn't ship DNS provider plugins (they'd bloat
+# every user's image for a feature most don't need) — xcaddy builds a
+# custom binary with just the one this repo needs.
+FROM caddy:{{ caddy_version }}-builder AS builder
+
+RUN xcaddy build \
+    --with github.com/caddy-dns/cloudflare
+
+FROM caddy:{{ caddy_version }}-alpine
+
+COPY --from=builder /usr/bin/caddy /usr/bin/caddy

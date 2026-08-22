@@ -1,25 +1,29 @@
 # Real inventory (inventory/hosts.ini) is git-ignored and, in CI, generated
-# at deploy time from OpenTofu outputs — see .github/workflows/deploy.yml.
+# at deploy time from OpenTofu's output — see .github/workflows/deploy.yml.
 #
-# For a manual/local run: first open ONE persistent IAP tunnel in another
-# terminal (leave it running for the whole session):
+# Two host groups now, matching the two plays in site.yml:
 #
-#   gcloud compute start-iap-tunnel coordination-server 22 \
-#     --local-host-port=localhost:2222 \
-#     --project=YOUR_PROJECT_ID --zone=YOUR_ZONE
+# [coordination_server] — GCP, only reachable via the IAP tunnel (see the
+# tunnel setup in deploy.yml / SETUP.md).
 #
-# Then copy this file to inventory/hosts.ini and use it as-is — Ansible
-# connects to that local forwarded port, not to the VM's real IP, so SSH
-# never touches the public internet.
-#
-# (A per-connection stdin ProxyCommand instead of a persistent tunnel was
-# tried first and made things dramatically slower — see the deploy.yml
-# comment for why. One tunnel for the whole run is the pattern that works.)
+# [reverse_proxy_server] — Proxmox, reachable directly at its MagicDNS name
+# once tailscaled has joined it (no tunnel needed — it's on the tailnet
+# you're running Ansible from). Group name matches coordination_server's
+# style (what the machine does); the host itself is just called "proxy" —
+# that's the actual tailnet hostname, see
+# ansible/group_vars/reverse_proxy_server/vars.yml. Group/host naming and
+# tailnet naming are independent on purpose.
 
 [coordination_server]
 coordination-server ansible_host=127.0.0.1 ansible_port=2222 ansible_user=deploy
 
+[reverse_proxy_server]
+proxy ansible_host=proxy.ts.conway-hash.com ansible_user=deploy
+
 [coordination_server:vars]
 ansible_ssh_private_key_file=~/.ssh/deploy_key
 ansible_ssh_common_args=-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=/tmp/ansible-cp/%C
-# mkdir -p /tmp/ansible-cp before running the playbook.
+
+[reverse_proxy_server:vars]
+ansible_ssh_private_key_file=~/.ssh/deploy_key
+ansible_ssh_common_args=-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=/tmp/ansible-cp/%C
