@@ -109,9 +109,24 @@ variable "proxmox_node" {
 }
 
 variable "proxmox_storage_pool" {
-  description = "Storage ID used for both the downloaded cloud image and the reverse proxy server VM's disk."
+  description = "Storage ID for the reverse proxy server VM's actual disk — block/LVM-thin storage (content type 'images'), not file-based. Default matches a stock Proxmox install's local-lvm."
   type        = string
   default     = "local-lvm"
+}
+
+variable "proxmox_file_storage_pool" {
+  description = <<-EOT
+    Storage ID the cloud image gets downloaded to before it's imported into
+    the VM's disk. Deliberately a separate variable from
+    proxmox_storage_pool: Proxmox storage is typed by content — the file
+    download needs a 'dir'-type storage whose content types include
+    'import' (default: local), while the VM's actual disk needs
+    block/LVM-thin storage (proxmox_storage_pool, default: local-lvm).
+    Using one storage pool for both fails with "not a file based storage!"
+    on a stock install, where local-lvm can't hold arbitrary files at all.
+  EOT
+  type        = string
+  default     = "local"
 }
 
 variable "proxmox_network_bridge" {

@@ -20,10 +20,11 @@ enable_proxy = false
 
 # proxmox_host is the short tailnet hostname of the Proxmox box; the API
 # endpoint is built as https://<proxmox_host>.<tailnet_base_domain>:8006/.
-proxmox_host           = "pve"
-proxmox_node           = "pve"
-proxmox_storage_pool   = "local-lvm"
-proxmox_network_bridge = "vmbr0"
+proxmox_host              = "pve"
+proxmox_node              = "pve"
+proxmox_storage_pool      = "local-lvm" # VM's actual disk — block/LVM-thin storage
+proxmox_file_storage_pool = "local"     # cloud image download target — must be 'dir'-type with 'import' content
+proxmox_network_bridge    = "vmbr0"
 proxy_vm_id            = 9000
 proxy_vm_name          = "proxy"
 proxy_cores            = 2

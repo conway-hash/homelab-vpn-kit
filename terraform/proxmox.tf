@@ -13,7 +13,7 @@ resource "proxmox_download_file" "proxy_cloud_image" {
   count = var.enable_proxy ? 1 : 0
 
   content_type = "import"
-  datastore_id = var.proxmox_storage_pool
+  datastore_id = var.proxmox_file_storage_pool
   node_name    = var.proxmox_node
   url          = "https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img"
   file_name    = "noble-server-cloudimg-amd64.qcow2"
