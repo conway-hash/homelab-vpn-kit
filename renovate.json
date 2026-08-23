@@ -35,21 +35,9 @@
     },
     {
       "customType": "regex",
-      "description": "Caddy image version on the coordination server. Pinned separately from the reverse proxy server's own Caddy — independently upgradable, deliberately not shared.",
+      "description": "Caddy image version on the coordination server.",
       "managerFilePatterns": [
         "/^ansible/group_vars/coordination_server/vars\\.yml$/"
-      ],
-      "matchStrings": [
-        "caddy_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"
-      ],
-      "datasourceTemplate": "docker",
-      "depNameTemplate": "caddy"
-    },
-    {
-      "customType": "regex",
-      "description": "Caddy image version on the reverse proxy server VM. Separate pin from the coordination server's Caddy — see that entry's note.",
-      "managerFilePatterns": [
-        "/^ansible/group_vars/reverse_proxy_server/vars\\.yml$/"
       ],
       "matchStrings": [
         "caddy_version:\\s*[\"'](?<currentValue>[^\"']+)[\"']"

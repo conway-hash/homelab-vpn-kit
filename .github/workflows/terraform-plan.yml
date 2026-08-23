@@ -22,8 +22,6 @@ jobs:
     defaults:
       run:
         working-directory: terraform
-    env:
-      TF_VAR_ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
     steps:
       - uses: actions/checkout@v7
 
@@ -35,29 +33,6 @@ jobs:
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}
-
-      # Proxmox's API is tailnet-only — the runner has to join before `tofu
-      # plan` can refresh/read the reverse proxy server VM's resources. Reads
-      # headscale_server_url straight out of the repo this job already
-      # checked out — one repo now, so no cross-repo fetch needed for this.
-      - name: Read tailnet vars from this repo
-        run: |
-          {
-            echo "HEADSCALE_SERVER_URL=$(grep '^headscale_server_url:' ../ansible/group_vars/all/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')"
-            echo "TAILNET_BASE_DOMAIN=$(grep '^tailnet_base_domain:' ../ansible/group_vars/all/vars.yml | sed 's/^tailnet_base_domain:[[:space:]]*//; s/[[:space:]]*#.*$//')"
-          } >> "$GITHUB_ENV"
-
-      # authkey (not OAuth) is the only option here: OAuth clients are a
-      # Tailscale-SaaS concept, this points at our own Headscale instead.
-      # Skipped while ENABLE_PROXY is unset — with no Proxmox resources in
-      # the plan there's nothing tailnet-only to refresh, and before the
-      # first deploy there's no tailnet to join yet either.
-      - if: vars.ENABLE_PROXY == 'true'
-        uses: tailscale/github-action@v4
-        with:
-          authkey: ${{ secrets.TS_AUTHKEY }}
-          args: --login-server=${{ env.HEADSCALE_SERVER_URL }}
-          hostname: ci-tofu-plan
 
       - name: tofu init
         run: |
@@ -81,13 +56,6 @@ jobs:
             -var="instance_name=${{ vars.INSTANCE_NAME }}" \
             -var="machine_type=${{ vars.MACHINE_TYPE }}" \
             -var="ssh_public_key=${{ secrets.SSH_PUBLIC_KEY }}" \
-            -var="enable_proxy=${{ vars.ENABLE_PROXY == 'true' }}" \
-            -var="tailnet_base_domain=${{ env.TAILNET_BASE_DOMAIN }}" \
-            -var="headscale_server_url=${{ env.HEADSCALE_SERVER_URL }}" \
-            -var="proxmox_host=${{ vars.PROXMOX_HOST || 'pve' }}" \
-            -var="proxmox_api_token=${{ secrets.PROXMOX_API_TOKEN }}" \
-            -var="proxmox_node=${{ vars.PROXMOX_NODE || 'pve' }}" \
-            -var="proxy_tailscale_authkey=${{ secrets.PROXY_NODE_TS_AUTHKEY }}" \
             -out=tfplan
 
       - name: tofu show

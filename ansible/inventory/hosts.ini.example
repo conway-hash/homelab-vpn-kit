@@ -1,29 +1,12 @@
 # Real inventory (inventory/hosts.ini) is git-ignored and, in CI, generated
 # at deploy time from OpenTofu's output — see .github/workflows/deploy.yml.
 #
-# Two host groups now, matching the two plays in site.yml:
-#
 # [coordination_server] — GCP, only reachable via the IAP tunnel (see the
 # tunnel setup in deploy.yml / SETUP.md).
-#
-# [reverse_proxy_server] — Proxmox, reachable directly at its MagicDNS name
-# once tailscaled has joined it (no tunnel needed — it's on the tailnet
-# you're running Ansible from). Group name matches coordination_server's
-# style (what the machine does); the host itself is just called "proxy" —
-# that's the actual tailnet hostname, see
-# ansible/group_vars/reverse_proxy_server/vars.yml. Group/host naming and
-# tailnet naming are independent on purpose.
 
 [coordination_server]
 coordination-server ansible_host=127.0.0.1 ansible_port=2222 ansible_user=deploy
 
-[reverse_proxy_server]
-proxy ansible_host=proxy.ts.conway-hash.com ansible_user=deploy
-
 [coordination_server:vars]
-ansible_ssh_private_key_file=~/.ssh/deploy_key
-ansible_ssh_common_args=-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=/tmp/ansible-cp/%C
-
-[reverse_proxy_server:vars]
 ansible_ssh_private_key_file=~/.ssh/deploy_key
 ansible_ssh_common_args=-o StrictHostKeyChecking=accept-new -o ControlMaster=auto -o ControlPersist=15m -o ControlPath=/tmp/ansible-cp/%C

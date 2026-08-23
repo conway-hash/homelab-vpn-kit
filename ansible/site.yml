@@ -49,13 +49,3 @@
   roles:
     - docker
     - coordination_server_stack
-
-- name: Deploy the tailnet's reverse proxy server
-  hosts: reverse_proxy_server
-  become: true
-  gather_facts: true
-
-  roles:
-    - docker
-    - tailscale
-    - reverse_proxy_server_stack
