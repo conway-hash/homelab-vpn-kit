@@ -52,12 +52,14 @@ jobs:
             echo "TAILNET_BASE_DOMAIN=$(grep '^tailnet_base_domain:' ../ansible/group_vars/all/vars.yml | sed 's/^tailnet_base_domain:[[:space:]]*//; s/[[:space:]]*#.*$//')"
           } >> "$GITHUB_ENV"
 
-      # Needed so `tofu apply` can reach Proxmox's tailnet-only API for the
-      # reverse proxy server VM resources. The GCP resources don't need it,
-      # and on a first-ever bootstrap it can't work at all — the tailnet's
-      # coordination server is what this very run is creating, and TS_AUTHKEY
-      # is minted on it afterwards. Skipped until ENABLE_PROXY is "true".
-      - if: vars.ENABLE_PROXY == 'true'
+      # TEMPORARY, one-run override: normally gated on ENABLE_PROXY=='true',
+      # but this run's whole purpose is flipping ENABLE_PROXY true->false to
+      # let `tofu apply` destroy the now-unwanted proxmox_* resources still
+      # sitting in state (count 1->0) — and destroying them still requires
+      # reaching Proxmox's tailnet-only API once more to do it. The entire
+      # reverse-proxy-server feature (this step included) is being removed
+      # right after this run confirms clean; don't copy this pattern.
+      - if: always()
         uses: tailscale/github-action@v4
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
