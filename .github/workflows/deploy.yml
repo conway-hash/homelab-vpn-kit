@@ -136,10 +136,10 @@ jobs:
 
       - name: Read the domain for the smoke test
         # Same source as everywhere else — headscale_server_url in this
-        # repo's group_vars/all/vars.yml — not a separate GitHub Actions
+        # repo's group_vars/coordination_server/vars.yml — not a separate GitHub Actions
         # variable holding a second copy of it.
         run: |
-          URL=$(grep '^headscale_server_url:' group_vars/all/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')
+          URL=$(grep '^headscale_server_url:' group_vars/coordination_server/vars.yml | sed 's/^headscale_server_url:[[:space:]]*//; s/[[:space:]]*#.*$//')
           echo "COORDINATION_DOMAIN=${URL#https://}" >> "$GITHUB_ENV"
 
       - name: Smoke test the public endpoint

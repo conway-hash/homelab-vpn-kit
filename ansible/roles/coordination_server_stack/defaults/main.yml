@@ -5,10 +5,11 @@
 # assert in tasks/main.yml refuses to deploy) — plus this one computed
 # value — live in this file.
 
-# The bare hostname, derived from headscale_server_url (group_vars/all)
-# rather than declared separately — domain and headscale_server_url used
-# to both hardcode "vpn.conway-hash.com" independently, which is exactly
-# the kind of drift-risk this repo's conventions exist to prevent.
+# The bare hostname, derived from headscale_server_url (group_vars/
+# coordination_server/vars.yml) rather than declared separately — domain
+# and headscale_server_url used to both hardcode "vpn.conway-hash.com"
+# independently, which is exactly the kind of drift-risk this repo's
+# conventions exist to prevent.
 domain: "{{ headscale_server_url | urlsplit('hostname') }}"
 
 # Shared between headscale's own OIDC (tailnet client login) and Headplane's

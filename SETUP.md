@@ -33,8 +33,8 @@ Always Free allowance:
 export PROJECT_ID="your-gcp-project-id"        # must not already exist, or already be yours
 export BILLING_ACCOUNT="XXXXXX-XXXXXX-XXXXXX"  # gcloud billing accounts list
 export REPO="conway-hash/homelab-vpn-kit" # GitHub owner/repo
-export DOMAIN="vpn.conway-hash.com"            # must match headscale_server_url's hostname in ansible/group_vars/all/vars.yml
-export TAILNET_DOMAIN="ts.conway-hash.com"     # must match tailnet_base_domain in ansible/group_vars/all/vars.yml
+export DOMAIN="vpn.conway-hash.com"            # must match headscale_server_url's hostname in ansible/group_vars/coordination_server/vars.yml
+export TAILNET_DOMAIN="ts.conway-hash.com"     # must match tailnet_base_domain in ansible/group_vars/coordination_server/vars.yml
 export REGION="us-central1"                    # Always Free tier: us-west1 | us-central1 | us-east1 only
 export ZONE="us-central1-a"
 export SA_NAME="gh-actions-deployer"
@@ -172,10 +172,10 @@ gh variable set HEADSCALE_ALLOWED_OIDC_USERS --body "$ALLOWED_USERS" -R "$REPO"
 ```
 
 No `DOMAIN` variable here on purpose — `deploy.yml` derives it from
-`headscale_server_url` in `ansible/group_vars/all/vars.yml` at run time,
+`headscale_server_url` in `ansible/group_vars/coordination_server/vars.yml` at run time,
 same as `HEADSCALE_SERVER_URL`/`TAILNET_BASE_DOMAIN`. The `$DOMAIN` you
 exported above is only for the commands in this file — make sure it
-actually matches what you put in `group_vars/all/vars.yml`.
+actually matches what you put in `group_vars/coordination_server/vars.yml`.
 
 Now delete `deploy_key` and `deploy_key.pub` from your local disk — they're
 in GitHub Secrets now and don't need to exist anywhere else.

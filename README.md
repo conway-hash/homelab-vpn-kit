@@ -24,7 +24,7 @@ subdomains are genuine, not placeholders, and left in place deliberately
 files byte-for-byte, though — nothing here auto-substitutes your domain.
 Before deploying your own copy:
 
-- `ansible/group_vars/all/vars.yml` — `tailnet_base_domain`,
+- `ansible/group_vars/coordination_server/vars.yml` — `tailnet_base_domain`,
   `headscale_server_url`, `acme_email`
 
 That's the whole list — all three live in the one file, and each is marked
@@ -82,8 +82,7 @@ terraform/
 ansible/
   site.yml              entrypoint — one play
   group_vars/
-    all/vars.yml           golden-base facts (tailnet_base_domain, headscale_server_url, acme_email)
-    coordination_server/   stack_dir, headscale/headplane/caddy version pins (domain is derived, not declared)
+    coordination_server/   tailnet_base_domain, headscale_server_url, acme_email, stack_dir, headscale/headplane/caddy version pins (domain is derived, not declared)
   roles/
     docker/                installs Docker Engine + Compose plugin
     coordination_server_stack/     Caddyfile, docker-compose.yml, headscale + headplane configs

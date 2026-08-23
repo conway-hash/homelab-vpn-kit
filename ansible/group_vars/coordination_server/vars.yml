@@ -1,8 +1,29 @@
 ---
-# domain isn't declared here — it's derived from headscale_server_url (see
-# group_vars/all/vars.yml) in coordination_server_stack's defaults, since
-# they're the same fact in two forms (bare hostname vs. full URL) and
-# declaring both independently let them drift once already.
+# USING THIS AS A TEMPLATE? tailnet_base_domain/headscale_server_url/
+# acme_email below are the author's real, live values — change them, or
+# your deploy will think it's serving conway-hash.com's tailnet. See
+# README.md's "Using this as a template" section.
+#
+# Keep the "change this" markers on their own line, above the value, never
+# trailing after it. CI reads headscale_server_url with `grep | sed` (see
+# deploy.yml's smoke-test step) and a trailing `# ...` would be captured
+# as part of the value.
+
+# <-- change this
+tailnet_base_domain: ts.conway-hash.com
+
+# <-- change this
+headscale_server_url: https://vpn.conway-hash.com
+
+# Caddy registers this with Let's Encrypt.
+#
+# <-- change this
+acme_email: labs@conway-hash.com
+
+# domain isn't declared here — it's derived from headscale_server_url in
+# coordination_server_stack's defaults, since they're the same fact in two
+# forms (bare hostname vs. full URL) and declaring both independently let
+# them drift once already.
 stack_dir: /opt/coordination_server_stack
 headscale_version: "0.29.3"
 headplane_version: "0.7.0"
