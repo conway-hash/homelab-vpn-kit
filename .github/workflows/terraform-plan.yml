@@ -27,7 +27,7 @@ jobs:
 
       - uses: opentofu/setup-opentofu@v2
         with:
-          tofu_version: "1.8.*"
+          tofu_version: "1.12.*"
 
       - uses: google-github-actions/auth@v3
         with:
